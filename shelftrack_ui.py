@@ -4,14 +4,6 @@ import pandas as pd
 
 st.set_page_config(page_title="ShelfTrack", layout="wide")
 
-# ---------- SESSION STATE ----------
-if "page" not in st.session_state:
-    st.session_state.page = "home"
-
-if "show_profile" not in st.session_state:
-    st.session_state.show_profile = False
-
-
 # ---------- DATABASE ----------
 conn = sqlite3.connect("inventory.db", check_same_thread=False)
 cursor = conn.cursor()
@@ -25,6 +17,16 @@ stock INTEGER
 """)
 
 conn.commit()
+
+# ---------- SESSION STATES ----------
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+
+if "show_profile" not in st.session_state:
+    st.session_state.show_profile = False
+
+if "edit_product" not in st.session_state:
+    st.session_state.edit_product = None
 
 
 # ---------- HEADER ----------
@@ -41,20 +43,20 @@ with col3:
         st.session_state.show_profile = not st.session_state.show_profile
 
 
-# ---------- PROFILE PANEL ----------
+# ---------- PROFILE ----------
 if st.session_state.show_profile:
 
     st.subheader("Store Profile")
 
     st.write("Owner: Raj Patel")
     st.write("Email: tulsi.restaurant@gmail.com")
-    st.write("Location: Vadodara, Gujarat")
+    st.write("Location: Vadodara")
     st.write("Plan: Gold")
 
     st.divider()
 
 
-# ---------- HOME PAGE ----------
+# ---------- HOME ----------
 if st.session_state.page == "home":
 
     st.markdown("<h1 style='text-align:center'>Tulsi</h1>", unsafe_allow_html=True)
@@ -62,7 +64,6 @@ if st.session_state.page == "home":
 
     st.write("")
 
-    # Metrics
     col1,col2,col3 = st.columns(3)
 
     with col1:
@@ -80,7 +81,6 @@ if st.session_state.page == "home":
     st.write("")
     st.write("")
 
-    # Navigation
     col1,col2 = st.columns(2)
 
     with col1:
@@ -98,7 +98,112 @@ if st.session_state.page == "home":
             st.session_state.page = "supplies"
 
 
-# ---------- TOTAL PRODUCTS ----------
+# ---------- INVENTORY ----------
+elif st.session_state.page == "inventory":
+
+    st.title("Inventory")
+
+    df = pd.read_sql("SELECT * FROM products", conn)
+
+    for index,row in df.iterrows():
+
+        col1,col2,col3,col4,col5,col6 = st.columns([3,2,1,1,1,1])
+
+        col1.write(f"📦 {row['name']}")
+        col2.write(f"Stock: {row['stock']}")
+
+        # EDIT
+        if col3.button("✏️", key=f"edit_{row['id']}"):
+            st.session_state.edit_product = row["id"]
+
+        # ADD STOCK
+        if col4.button("➕", key=f"add_{row['id']}"):
+
+            cursor.execute(
+                "UPDATE products SET stock = stock + 1 WHERE id=?",
+                (row["id"],)
+            )
+
+            conn.commit()
+            st.rerun()
+
+        # REMOVE STOCK
+        if col5.button("➖", key=f"minus_{row['id']}"):
+
+            cursor.execute(
+                "UPDATE products SET stock = stock - 1 WHERE id=?",
+                (row["id"],)
+            )
+
+            conn.commit()
+            st.rerun()
+
+        # DELETE
+        if col6.button("🗑️", key=f"delete_{row['id']}"):
+
+            cursor.execute(
+                "DELETE FROM products WHERE id=?",
+                (row["id"],)
+            )
+
+            conn.commit()
+            st.rerun()
+
+
+    st.divider()
+
+    # EDIT PANEL
+    if st.session_state.edit_product:
+
+        product_id = st.session_state.edit_product
+
+        product = cursor.execute(
+            "SELECT * FROM products WHERE id=?",
+            (product_id,)
+        ).fetchone()
+
+        st.subheader("Edit Product")
+
+        new_name = st.text_input("Product Name", product[1])
+
+        new_stock = st.number_input("Stock", value=product[2], min_value=0)
+
+        if st.button("Update Product"):
+
+            cursor.execute(
+                "UPDATE products SET name=?, stock=? WHERE id=?",
+                (new_name,new_stock,product_id)
+            )
+
+            conn.commit()
+
+            st.session_state.edit_product = None
+
+            st.rerun()
+
+    # ADD NEW PRODUCT
+    st.divider()
+
+    st.subheader("Add New Product")
+
+    new_product = st.text_input("New Product Name")
+
+    if st.button("Add Product"):
+
+        cursor.execute(
+            "INSERT INTO products (name,stock) VALUES (?,?)",
+            (new_product,1)
+        )
+
+        conn.commit()
+
+        st.rerun()
+
+    if st.button("⬅ Back"):
+        st.session_state.page = "home"
+
+
+# ---------- PRODUCTS ----------
 elif st.session_state.page == "products":
 
     st.title("All Products")
@@ -111,15 +216,28 @@ elif st.session_state.page == "products":
         st.session_state.page = "home"
 
 
-# ---------- PENDING ORDERS ----------
+# ---------- LOW SUPPLY ----------
+elif st.session_state.page == "low":
+
+    st.title("Low Supply")
+
+    df = pd.read_sql("SELECT * FROM products WHERE stock < 10", conn)
+
+    st.table(df)
+
+    if st.button("⬅ Back"):
+        st.session_state.page = "home"
+
+
+# ---------- ORDERS ----------
 elif st.session_state.page == "orders":
 
     st.title("Pending Orders")
 
     orders = {
-        "Order ID":[101,102,103],
-        "Product":["Milk","Eggs","Vegetables"],
-        "Quantity":[20,30,50]
+        "Order ID":[101,102],
+        "Product":["Milk","Eggs"],
+        "Quantity":[30,40]
     }
 
     st.table(pd.DataFrame(orders))
@@ -128,68 +246,29 @@ elif st.session_state.page == "orders":
         st.session_state.page = "home"
 
 
-# ---------- LOW SUPPLY ----------
-elif st.session_state.page == "low":
-
-    st.title("Low Supply Products")
-
-    df = pd.read_sql("SELECT * FROM products WHERE stock < 15", conn)
-
-    st.table(df)
-
-    if st.button("⬅ Back"):
-        st.session_state.page = "home"
-
-
 # ---------- DASHBOARD ----------
 elif st.session_state.page == "dashboard":
 
-    st.title("Dashboard Overview")
+    st.title("Dashboard")
 
     df = pd.read_sql("SELECT * FROM products", conn)
 
-    total_products = len(df)
+    st.metric("Total Products", len(df))
 
-    low_products = len(df[df["stock"] < 15])
-
-    st.metric("Total Products", total_products)
-    st.metric("Low Supply Items", low_products)
+    st.metric("Low Stock", len(df[df["stock"] < 10]))
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
 
 
-# ---------- INVENTORY ----------
-elif st.session_state.page == "inventory":
+# ---------- SUPPLIES ----------
+elif st.session_state.page == "supplies":
 
-    st.title("Inventory Management")
+    st.title("Supplies")
 
-    # Show products
-    df = pd.read_sql("SELECT * FROM products", conn)
+    st.write("Recommended Supplier")
 
-    st.subheader("Current Inventory")
-
-    st.table(df)
-
-    st.divider()
-
-    # Add Product Form
-    st.subheader("Add Product")
-
-    name = st.text_input("Product Name")
-
-    stock = st.number_input("Stock Quantity", min_value=1)
-
-    if st.button("Add Product"):
-
-        cursor.execute(
-            "INSERT INTO products (name, stock) VALUES (?,?)",
-            (name,stock)
-        )
-
-        conn.commit()
-
-        st.success("Product added successfully")
+    st.success("FreshFarm Distributors")
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
@@ -200,86 +279,14 @@ elif st.session_state.page == "notifications":
 
     st.title("Notifications")
 
-    df = pd.read_sql("SELECT * FROM products WHERE stock < 15", conn)
+    df = pd.read_sql("SELECT * FROM products WHERE stock < 10", conn)
 
     if len(df) == 0:
-        st.success("No alerts")
+        st.success("All stock levels normal")
 
     else:
-        st.warning("Low stock detected")
-
+        st.warning("Low stock items detected")
         st.table(df)
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
-
-
-# ---------- SUPPLIES ----------
-elif st.session_state.page == "supplies":
-
-    st.title("Supplier Recommendations")
-
-    st.write("Recommended Supplier")
-
-    st.success("FreshFarm Distributors")
-
-    st.write("Milk Price: ₹27 per unit")
-
-    if st.button("⬅ Back"):
-        st.session_state.page = "home"
-
-elif st.session_state.page == "inventory":
-
-    st.title("Inventory Management")
-
-    # Get products from database
-    df = pd.read_sql("SELECT * FROM products", conn)
-
-    st.subheader("Current Inventory")
-
-    # Show products with delete buttons
-    for index, row in df.iterrows():
-
-        col1, col2, col3 = st.columns([4,2,1])
-
-        col1.write(row["name"])
-        col2.write(f"Stock: {row['stock']}")
-
-        if col3.button("Delete", key=row["id"]):
-
-            cursor.execute(
-                "DELETE FROM products WHERE id=?",
-                (row["id"],)
-            )
-
-            conn.commit()
-
-            st.success("Product removed")
-
-            st.rerun()
-
-    st.divider()
-
-    # Add product section
-    st.subheader("Add Product")
-
-    name = st.text_input("Product Name")
-
-    stock = st.number_input("Stock Quantity", min_value=1)
-
-    if st.button("Add Product"):
-
-        cursor.execute(
-            "INSERT INTO products (name, stock) VALUES (?,?)",
-            (name, stock)
-        )
-
-        conn.commit()
-
-        st.success("Product added")
-
-        st.rerun()
-
-    if st.button("⬅ Back"):
-        st.session_state.page = "home"
-
