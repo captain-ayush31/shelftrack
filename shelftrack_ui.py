@@ -227,3 +227,59 @@ elif st.session_state.page == "supplies":
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
+
+elif st.session_state.page == "inventory":
+
+    st.title("Inventory Management")
+
+    # Get products from database
+    df = pd.read_sql("SELECT * FROM products", conn)
+
+    st.subheader("Current Inventory")
+
+    # Show products with delete buttons
+    for index, row in df.iterrows():
+
+        col1, col2, col3 = st.columns([4,2,1])
+
+        col1.write(row["name"])
+        col2.write(f"Stock: {row['stock']}")
+
+        if col3.button("Delete", key=row["id"]):
+
+            cursor.execute(
+                "DELETE FROM products WHERE id=?",
+                (row["id"],)
+            )
+
+            conn.commit()
+
+            st.success("Product removed")
+
+            st.rerun()
+
+    st.divider()
+
+    # Add product section
+    st.subheader("Add Product")
+
+    name = st.text_input("Product Name")
+
+    stock = st.number_input("Stock Quantity", min_value=1)
+
+    if st.button("Add Product"):
+
+        cursor.execute(
+            "INSERT INTO products (name, stock) VALUES (?,?)",
+            (name, stock)
+        )
+
+        conn.commit()
+
+        st.success("Product added")
+
+        st.rerun()
+
+    if st.button("⬅ Back"):
+        st.session_state.page = "home"
+
