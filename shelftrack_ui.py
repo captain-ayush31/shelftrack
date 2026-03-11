@@ -1,8 +1,10 @@
 import streamlit as st
+import sqlite3
+import pandas as pd
 
 st.set_page_config(page_title="ShelfTrack", layout="wide")
 
-# ---------- SESSION STATES ----------
+# ---------- SESSION STATE ----------
 if "page" not in st.session_state:
     st.session_state.page = "home"
 
@@ -10,87 +12,44 @@ if "show_profile" not in st.session_state:
     st.session_state.show_profile = False
 
 
-# ---------- STYLING ----------
-st.markdown("""
-<style>
+# ---------- DATABASE ----------
+conn = sqlite3.connect("inventory.db", check_same_thread=False)
+cursor = conn.cursor()
 
-.block-container{
-padding-top:1rem;
-}
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS products(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+name TEXT,
+stock INTEGER
+)
+""")
 
-header {visibility:hidden;}
-footer {visibility:hidden;}
-
-.store{
-text-align:center;
-font-size:50px;
-font-weight:700;
-}
-
-.subtitle{
-text-align:center;
-font-size:22px;
-color:#555;
-}
-
-.metric-card{
-background:white;
-padding:20px;
-border-radius:12px;
-text-align:center;
-box-shadow:0px 3px 10px rgba(0,0,0,0.1);
-}
-
-.gold{
-color:#D4AF37;
-font-weight:600;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-
-# ---------- DATA ----------
-products = {
-    "Product": ["Rice","Milk","Eggs","Butter","Flour"],
-    "Stock": [50,10,5,30,60]
-}
-
-pending_orders = {
-    "Order ID":[101,102,103],
-    "Product":["Milk","Eggs","Vegetables"],
-    "Quantity":[20,30,50]
-}
-
-low_supply = {
-    "Product":["Milk","Eggs"],
-    "Stock Left":[10,5]
-}
+conn.commit()
 
 
 # ---------- HEADER ----------
 col1,col2,col3 = st.columns([2,6,2])
 
 with col1:
-    st.image("logo.png", width=120)
+    st.image("logo.png", width=140)
 
 with col2:
-    st.markdown("<h2 style='text-align:center;'>Welcome to ShelfTrack</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center'>Welcome to ShelfTrack</h2>", unsafe_allow_html=True)
 
 with col3:
     if st.button("👤 Profile"):
         st.session_state.show_profile = not st.session_state.show_profile
 
 
-# ---------- PROFILE ----------
+# ---------- PROFILE PANEL ----------
 if st.session_state.show_profile:
 
     st.subheader("Store Profile")
 
     st.write("Owner: Raj Patel")
     st.write("Email: tulsi.restaurant@gmail.com")
-    st.write("Location: Vadodara")
-    st.markdown("<span class='gold'>Plan: Gold</span>", unsafe_allow_html=True)
+    st.write("Location: Vadodara, Gujarat")
+    st.write("Plan: Gold")
 
     st.divider()
 
@@ -98,28 +57,30 @@ if st.session_state.show_profile:
 # ---------- HOME PAGE ----------
 if st.session_state.page == "home":
 
-    st.markdown("<div class='store'>Tulsi</div>", unsafe_allow_html=True)
-    st.markdown("<div class='subtitle'>Tulsi Restaurant</div>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align:center'>Tulsi</h1>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align:center'>Tulsi Restaurant</h4>", unsafe_allow_html=True)
 
     st.write("")
 
+    # Metrics
     col1,col2,col3 = st.columns(3)
 
     with col1:
-        if st.button("Total Products\n120", use_container_width=True):
+        if st.button("Total Products", use_container_width=True):
             st.session_state.page = "products"
 
     with col2:
-        if st.button("Pending Orders\n6", use_container_width=True):
+        if st.button("Pending Orders", use_container_width=True):
             st.session_state.page = "orders"
 
     with col3:
-        if st.button("Low Supply\n4", use_container_width=True):
+        if st.button("Low Supply", use_container_width=True):
             st.session_state.page = "low"
 
     st.write("")
     st.write("")
 
+    # Navigation
     col1,col2 = st.columns(2)
 
     with col1:
@@ -137,12 +98,14 @@ if st.session_state.page == "home":
             st.session_state.page = "supplies"
 
 
-# ---------- PRODUCTS ----------
+# ---------- TOTAL PRODUCTS ----------
 elif st.session_state.page == "products":
 
-    st.title("Total Products")
+    st.title("All Products")
 
-    st.table(products)
+    df = pd.read_sql("SELECT * FROM products", conn)
+
+    st.table(df)
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
@@ -153,7 +116,13 @@ elif st.session_state.page == "orders":
 
     st.title("Pending Orders")
 
-    st.table(pending_orders)
+    orders = {
+        "Order ID":[101,102,103],
+        "Product":["Milk","Eggs","Vegetables"],
+        "Quantity":[20,30,50]
+    }
+
+    st.table(pd.DataFrame(orders))
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
@@ -162,9 +131,11 @@ elif st.session_state.page == "orders":
 # ---------- LOW SUPPLY ----------
 elif st.session_state.page == "low":
 
-    st.title("Low Supply Items")
+    st.title("Low Supply Products")
 
-    st.table(low_supply)
+    df = pd.read_sql("SELECT * FROM products WHERE stock < 15", conn)
+
+    st.table(df)
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
@@ -173,13 +144,16 @@ elif st.session_state.page == "low":
 # ---------- DASHBOARD ----------
 elif st.session_state.page == "dashboard":
 
-    st.title("Dashboard")
+    st.title("Dashboard Overview")
 
-    col1,col2,col3 = st.columns(3)
+    df = pd.read_sql("SELECT * FROM products", conn)
 
-    col1.metric("Total Products","120")
-    col2.metric("Pending Orders","6")
-    col3.metric("Low Supply","4")
+    total_products = len(df)
+
+    low_products = len(df[df["stock"] < 15])
+
+    st.metric("Total Products", total_products)
+    st.metric("Low Supply Items", low_products)
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
@@ -188,9 +162,34 @@ elif st.session_state.page == "dashboard":
 # ---------- INVENTORY ----------
 elif st.session_state.page == "inventory":
 
-    st.title("Inventory")
+    st.title("Inventory Management")
 
-    st.table(products)
+    # Show products
+    df = pd.read_sql("SELECT * FROM products", conn)
+
+    st.subheader("Current Inventory")
+
+    st.table(df)
+
+    st.divider()
+
+    # Add Product Form
+    st.subheader("Add Product")
+
+    name = st.text_input("Product Name")
+
+    stock = st.number_input("Stock Quantity", min_value=1)
+
+    if st.button("Add Product"):
+
+        cursor.execute(
+            "INSERT INTO products (name, stock) VALUES (?,?)",
+            (name,stock)
+        )
+
+        conn.commit()
+
+        st.success("Product added successfully")
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
@@ -201,8 +200,15 @@ elif st.session_state.page == "notifications":
 
     st.title("Notifications")
 
-    st.warning("Milk stock running low")
-    st.warning("Egg inventory low")
+    df = pd.read_sql("SELECT * FROM products WHERE stock < 15", conn)
+
+    if len(df) == 0:
+        st.success("No alerts")
+
+    else:
+        st.warning("Low stock detected")
+
+        st.table(df)
 
     if st.button("⬅ Back"):
         st.session_state.page = "home"
@@ -211,9 +217,12 @@ elif st.session_state.page == "notifications":
 # ---------- SUPPLIES ----------
 elif st.session_state.page == "supplies":
 
-    st.title("Supplies")
+    st.title("Supplier Recommendations")
 
-    st.write("Recommended Supplier: FreshFarm Distributors")
+    st.write("Recommended Supplier")
+
+    st.success("FreshFarm Distributors")
+
     st.write("Milk Price: ₹27 per unit")
 
     if st.button("⬅ Back"):
